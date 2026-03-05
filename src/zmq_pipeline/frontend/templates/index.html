@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZMQ Pipeline Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ── Root variables ─────────────────────────────────────────────── */
+    :root {
+      --bg:          #070b10;
+      --surface:     #0d1520;
+      --surface2:    #111d2e;
+      --border:      #1a2e48;
+      --border2:     #243d5a;
+      --text:        #c0d4e8;
+      --text-dim:    #4a6a88;
+      --text-muted:  #2a4060;
+      --amber:       #e09820;
+      --amber-dim:   #704810;
+      --green:       #18c438;
+      --green-dim:   #0a4820;
+      --red:         #e02838;
+      --red-dim:     #500810;
+      --blue:        #3080e8;
+      --blue-dim:    #102858;
+      --idle-bg:     #0d1520;
+      --font-mono:   'IBM Plex Mono', 'Courier New', monospace;
+      --font-sans:   'IBM Plex Sans', sans-serif;
+      --r:           2px;
+    }
+
+    /* ── Reset & base ───────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+      min-height: 100vh;
+      /* subtle scanline texture */
+      background-image: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,0,0,0.08) 2px,
+        rgba(0,0,0,0.08) 4px
+      );
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-title {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+
+    .header-title h1 {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--amber);
+    }
+
+    .header-title .subtitle {
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 0.05em;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    /* Connection indicator */
+    .conn-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+    }
+
+    .conn-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: background 0.3s;
+    }
+
+    .conn-dot.connected {
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    .conn-dot.error {
+      background: var(--red);
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    /* ── Main layout ─────────────────────────────────────────────────── */
+    .main {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      grid-template-rows: auto 1fr;
+      gap: 0;
+      height: calc(100vh - 41px);
+    }
+
+    /* ── Panel base ─────────────────────────────────────────────────── */
+    .panel {
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+    }
+
+    .panel-header .ph-icon {
+      width: 12px;
+      height: 1px;
+      background: var(--amber);
+    }
+
+    /* ── Dispatch panel ─────────────────────────────────────────────── */
+    #panel-dispatch {
+      grid-column: 1;
+      grid-row: 1 / 3;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .dispatch-body {
+      flex: 1;
+      padding: 16px 14px;
+      overflow-y: auto;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 5px;
+    }
+
+    .field input, .field textarea, .field select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 6px 8px;
+      border-radius: var(--r);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .field input:focus, .field textarea:focus {
+      border-color: var(--border2);
+    }
+
+    .field input[readonly] {
+      color: var(--text-dim);
+      cursor: default;
+    }
+
+    .field .hint {
+      font-size: 9px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .task-count-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .task-count-row input[type="number"] {
+      width: 70px;
+    }
+
+    .task-count-row .tc-label {
+      font-size: 10px;
+      color: var(--text-dim);
+    }
+
+    .launch-btn {
+      width: 100%;
+      padding: 10px 0;
+      background: transparent;
+      border: 1px solid var(--amber);
+      color: var(--amber);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: var(--r);
+      transition: all 0.15s;
+      margin-top: 4px;
+    }
+
+    .launch-btn:hover:not(:disabled) {
+      background: rgba(224, 152, 32, 0.1);
+      box-shadow: 0 0 12px rgba(224, 152, 32, 0.2);
+    }
+
+    .launch-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    .launch-btn.loading {
+      animation: btn-pulse 0.8s ease-in-out infinite;
+    }
+
+    @keyframes btn-pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.5; }
+    }
+
+    /* Response banner */
+    .response-banner {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: var(--r);
+      font-size: 10px;
+      display: none;
+      line-height: 1.6;
+    }
+
+    .response-banner.ok {
+      display: block;
+      background: var(--green-dim);
+      border: 1px solid var(--green);
+      color: var(--green);
+    }
+
+    .response-banner.err {
+      display: block;
+      background: var(--red-dim);
+      border: 1px solid var(--red);
+      color: var(--red);
+    }
+
+    /* Job progress bar */
+    .job-progress {
+      margin-top: 14px;
+      display: none;
+    }
+
+    .job-progress.visible { display: block; }
+
+    .jp-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    .jp-track {
+      height: 4px;
+      background: var(--surface2);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .jp-fill {
+      height: 100%;
+      background: var(--green);
+      width: 0%;
+      transition: width 0.3s ease;
+      border-radius: 2px;
+    }
+
+    .jp-fill.error { background: var(--red); }
+
+    /* Task heatmap */
+    .task-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-top: 10px;
+    }
+
+    .task-cell {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      transition: background 0.25s, border-color 0.25s;
+      cursor: default;
+      position: relative;
+    }
+
+    .task-cell[title]:hover::after {
+      content: attr(title);
+      position: absolute;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 2px 6px;
+      font-size: 9px;
+      white-space: nowrap;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .task-cell.busy   { background: var(--amber); border-color: var(--amber); }
+    .task-cell.done   { background: var(--green); border-color: var(--green); }
+    .task-cell.error  { background: var(--red);   border-color: var(--red); }
+
+    /* ── Status panel ───────────────────────────────────────────────── */
+    #panel-status {
+      grid-column: 2;
+      grid-row: 1;
+      overflow-y: auto;
+    }
+
+    .status-body {
+      padding: 12px 14px;
+    }
+
+    .component-section {
+      margin-bottom: 16px;
+    }
+
+    .cs-title {
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .cs-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .component-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .comp-row {
+      display: grid;
+      grid-template-columns: 160px 100px 80px 1fr;
+      gap: 8px;
+      align-items: center;
+      padding: 5px 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      transition: border-color 0.2s;
+      font-size: 11px;
+    }
+
+    .comp-row.active { border-color: var(--border2); }
+
+    .comp-id {
+      color: var(--text);
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .comp-status {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      padding: 2px 6px;
+      border-radius: var(--r);
+      text-align: center;
+      transition: all 0.2s;
+    }
+
+    .comp-status.idle         { color: var(--text-dim); background: transparent; }
+    .comp-status.busy         { color: var(--amber);    background: var(--amber-dim); }
+    .comp-status.distributing { color: var(--blue);     background: var(--blue-dim); }
+    .comp-status.done         { color: var(--green);    background: var(--green-dim); }
+    .comp-status.error        { color: var(--red);      background: var(--red-dim); }
+    .comp-status.running      { color: var(--blue);     background: var(--blue-dim); }
+
+    .comp-task {
+      font-size: 9px;
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .comp-time {
+      font-size: 9px;
+      color: var(--text-muted);
+      text-align: right;
+    }
+
+    /* ── Log panel ──────────────────────────────────────────────────── */
+    #panel-log {
+      grid-column: 2;
+      grid-row: 2;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .log-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+      font-size: 11px;
+    }
+
+    /* Newest at top: use column-reverse flex */
+    .log-entries {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .log-entry {
+      display: grid;
+      grid-template-columns: 68px 52px 88px 1fr;
+      gap: 0;
+      padding: 2px 14px;
+      border-bottom: 1px solid transparent;
+      animation: log-in 0.18s ease;
+      line-height: 1.55;
+    }
+
+    @keyframes log-in {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-entry:hover { background: var(--surface); }
+
+    .log-ts   { color: var(--text-muted); }
+    .log-comp { color: var(--text-dim); }
+    .log-level {
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+    .log-level.INFO  { color: var(--text-dim); }
+    .log-level.WARN  { color: var(--amber); }
+    .log-level.ERROR { color: var(--red); }
+    .log-msg  { color: var(--text); }
+
+    /* Log empty state */
+    .log-empty {
+      padding: 20px 14px;
+      color: var(--text-muted);
+      font-size: 10px;
+      font-style: italic;
+    }
+
+    /* ── Job complete banner ─────────────────────────────────────────── */
+    .complete-banner {
+      display: none;
+      margin: 0 14px 12px;
+      padding: 10px 14px;
+      border-radius: var(--r);
+      font-size: 11px;
+      animation: slide-in 0.3s ease;
+    }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .complete-banner.ok {
+      display: flex;
+      justify-content: space-between;
+      background: rgba(24, 196, 56, 0.08);
+      border: 1px solid var(--green);
+      color: var(--green);
+    }
+
+    .complete-banner.partial {
+      display: flex;
+      justify-content: space-between;
+      background: var(--amber-dim);
+      border: 1px solid var(--amber);
+      color: var(--amber);
+    }
+
+    /* ── Scrollbar styling ──────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">
+    <h1>ZMQ Pipeline Control</h1>
+    <span class="subtitle">Ventilator / Worker / Sink topology</span>
+  </div>
+  <div class="header-right">
+    <div class="conn-indicator">
+      <div class="conn-dot" id="conn-dot"></div>
+      <span id="conn-label">DISCONNECTED</span>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- ── Dispatch panel ───────────────────────────────────────────── -->
+  <div class="panel" id="panel-dispatch">
+    <div class="panel-header"><div class="ph-icon"></div>JOB DISPATCH</div>
+    <div class="dispatch-body">
+
+      <div class="field">
+        <label>Job ID</label>
+        <input type="text" id="job-id" readonly>
+        <div class="hint">Auto-generated UUID v4</div>
+      </div>
+
+      <div class="field">
+        <label>Pipeline Name</label>
+        <input type="text" id="pipeline-name" value="echo_test" maxlength="60">
+      </div>
+
+      <div class="field">
+        <label>Description</label>
+        <input type="text" id="pipeline-desc" value="Phase 6 demo run" maxlength="120">
+      </div>
+
+      <div class="field">
+        <label>Task Count</label>
+        <div class="task-count-row">
+          <input type="number" id="task-count" value="20" min="1" max="200">
+          <span class="tc-label">tasks to dispatch</span>
+        </div>
+        <div class="hint">Each task: {index: N, scale: 0.5}</div>
+      </div>
+
+      <button class="launch-btn" id="launch-btn" onclick="submitJob()">
+        ▶  LAUNCH JOB
+      </button>
+
+      <div class="response-banner" id="response-banner"></div>
+
+      <div class="job-progress" id="job-progress">
+        <div class="jp-label">
+          <span>Task completion</span>
+          <span id="jp-count">0 / 0</span>
+        </div>
+        <div class="jp-track"><div class="jp-fill" id="jp-fill"></div></div>
+        <div class="task-grid" id="task-grid"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Component status panel ───────────────────────────────────── -->
+  <div class="panel" id="panel-status">
+    <div class="panel-header"><div class="ph-icon"></div>COMPONENT STATUS</div>
+    <div class="status-body">
+
+      <div class="component-section">
+        <div class="cs-title">Ventilator</div>
+        <div class="component-rows" id="comp-ventilator">
+          <div class="comp-row" id="cr-ventilator-0">
+            <span class="comp-id">ventilator-0</span>
+            <span class="comp-status idle" id="cs-ventilator-0">idle</span>
+            <span class="comp-task" id="ct-ventilator-0">—</span>
+            <span class="comp-time" id="ctime-ventilator-0">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="component-section">
+        <div class="cs-title">Workers</div>
+        <div class="component-rows" id="comp-worker">
+          <div class="comp-row">
+            <span class="comp-id" style="color:var(--text-muted); font-size:10px;">
+              awaiting workers…
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="component-section">
+        <div class="cs-title">Sink</div>
+        <div class="component-rows" id="comp-sink">
+          <div class="comp-row" id="cr-sink-0">
+            <span class="comp-id">sink-0</span>
+            <span class="comp-status idle" id="cs-sink-0">idle</span>
+            <span class="comp-task" id="ct-sink-0">—</span>
+            <span class="comp-time" id="ctime-sink-0">—</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="complete-banner" id="complete-banner"></div>
+
+    </div>
+  </div>
+
+  <!-- ── Log panel ────────────────────────────────────────────────── -->
+  <div class="panel" id="panel-log">
+    <div class="panel-header"><div class="ph-icon"></div>EVENT LOG</div>
+    <div class="log-body" id="log-body">
+      <div class="log-entries" id="log-entries">
+        <div class="log-empty">Waiting for telemetry events…</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────
+const state = {
+  ws: null,
+  wsReady: false,
+  currentJobId: null,
+  taskCount: 0,
+  completedCount: 0,
+  errorCount: 0,
+  tasks: {},        // task_id → 'busy'|'done'|'error'
+  workers: {},      // component_id → { status, task_id, last_seen }
+  logCount: 0,
+  maxLogs: 500,
+};
+
+// ── UUID v4 ───────────────────────────────────────────────────────────────
+function uuidv4() {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────
+document.getElementById('job-id').value = uuidv4();
+connectWebSocket();
+
+function refreshJobId() {
+  document.getElementById('job-id').value = uuidv4();
+}
+
+// ── WebSocket ─────────────────────────────────────────────────────────────
+function connectWebSocket() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url   = `${proto}//${location.host}/ws`;
+  const dot   = document.getElementById('conn-dot');
+  const label = document.getElementById('conn-label');
+
+  dot.className = 'conn-dot';
+  label.textContent = 'CONNECTING…';
+
+  const ws = new WebSocket(url);
+  state.ws = ws;
+
+  ws.onopen = () => {
+    state.wsReady = true;
+    dot.className = 'conn-dot connected';
+    label.textContent = 'LIVE';
+  };
+
+  ws.onclose = () => {
+    state.wsReady = false;
+    dot.className = 'conn-dot error';
+    label.textContent = 'DISCONNECTED';
+    // Reconnect after 2 s
+    setTimeout(connectWebSocket, 2000);
+  };
+
+  ws.onerror = () => {
+    ws.close();
+  };
+
+  ws.onmessage = e => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    handleWsMessage(msg);
+  };
+}
+
+// ── Message handler ───────────────────────────────────────────────────────
+function handleWsMessage(msg) {
+  switch (msg.event) {
+    case 'status_update': handleStatusUpdate(msg); break;
+    case 'log_event':     handleLogEvent(msg);     break;
+    case 'job_complete':  handleJobComplete(msg);  break;
+  }
+}
+
+function handleStatusUpdate(msg) {
+  const { component, component_id, job_id, timestamp, data } = msg;
+  const { status, task_id } = data;
+
+  // Update component row
+  updateComponentRow(component, component_id, status, task_id, timestamp);
+
+  // Update task cell if worker is marking a task done/error/busy
+  if (component === 'worker' && task_id) {
+    if (status === 'busy')  updateTaskCell(task_id, 'busy');
+    if (status === 'done')  updateTaskCell(task_id, 'done');
+    if (status === 'error') updateTaskCell(task_id, 'error');
+  }
+
+  // Track worker done/error for progress
+  if (component === 'worker' && status === 'done') {
+    state.completedCount++;
+    refreshProgress();
+  }
+  if (component === 'worker' && status === 'error') {
+    state.errorCount++;
+    refreshProgress();
+  }
+
+  // Sink done with authoritative counts — correct any PUB/SUB losses
+  if (component === 'sink' && status === 'done') {
+    if (data.completed_count != null) state.completedCount = data.completed_count;
+    if (data.error_count != null)     state.errorCount = data.error_count;
+    refreshProgress();
+  }
+}
+
+function handleLogEvent(msg) {
+  const { component, component_id, timestamp, data } = msg;
+  appendLog(timestamp, component_id || component, data.level, data.message);
+}
+
+function handleJobComplete(msg) {
+  const { job_id, data } = msg;
+  const { tasks_total, tasks_ok, tasks_error } = data;
+  const banner = document.getElementById('complete-banner');
+  const isOk = tasks_error === 0;
+  banner.className = `complete-banner ${isOk ? 'ok' : 'partial'}`;
+  banner.innerHTML = `
+    <span>JOB COMPLETE</span>
+    <span>${tasks_ok} ok / ${tasks_error} error / ${tasks_total} total</span>
+  `;
+  // Correct progress from authoritative sink counts
+  state.completedCount = tasks_ok;
+  state.errorCount = tasks_error;
+  state.taskCount = tasks_total;
+  refreshProgress();
+  // Final progress fill
+  const fill = document.getElementById('jp-fill');
+  fill.style.width = '100%';
+  if (tasks_error > 0) fill.classList.add('error');
+}
+
+// ── Component row management ──────────────────────────────────────────────
+function updateComponentRow(component, component_id, status, task_id, timestamp) {
+  const containerId = `comp-${component}`;
+  const container   = document.getElementById(containerId);
+  if (!container) return;
+
+  const rowId = `cr-${component_id.replace(/[^a-zA-Z0-9-]/g, '-')}`;
+  let row = document.getElementById(rowId);
+
+  if (!row) {
+    // First time seeing this component — create row
+    if (component === 'worker') {
+      // Remove the "awaiting" placeholder on first worker
+      const placeholder = container.querySelector('.comp-row');
+      if (placeholder && placeholder.querySelector('.comp-id')?.textContent?.includes('awaiting')) {
+        placeholder.remove();
+      }
+      state.workers[component_id] = { status: 'idle', task_id: null };
+    }
+
+    row = document.createElement('div');
+    row.className = 'comp-row';
+    row.id = rowId;
+    row.innerHTML = `
+      <span class="comp-id">${escHtml(component_id)}</span>
+      <span class="comp-status idle" id="cs-${rowId}">idle</span>
+      <span class="comp-task"        id="ct-${rowId}">—</span>
+      <span class="comp-time"        id="ctime-${rowId}">—</span>
+    `;
+    container.appendChild(row);
+  }
+
+  const statusEl = document.getElementById(`cs-${rowId}`);
+  const taskEl   = document.getElementById(`ct-${rowId}`);
+  const timeEl   = document.getElementById(`ctime-${rowId}`);
+
+  if (statusEl) {
+    statusEl.className = `comp-status ${status}`;
+    statusEl.textContent = status;
+  }
+  if (taskEl) taskEl.textContent = task_id || '—';
+  if (timeEl) timeEl.textContent = fmtTime(timestamp);
+
+  // Highlight active rows
+  row.classList.toggle('active', status !== 'idle');
+
+  // Track worker state
+  if (component === 'worker') {
+    state.workers[component_id] = { status, task_id };
+  }
+}
+
+// ── Task grid ─────────────────────────────────────────────────────────────
+function buildTaskGrid(taskCount) {
+  const grid = document.getElementById('task-grid');
+  grid.innerHTML = '';
+  for (let i = 0; i < taskCount; i++) {
+    const id = `task-${String(i).padStart(3, '0')}`;
+    const cell = document.createElement('div');
+    cell.className = 'task-cell';
+    cell.id = `tcell-${id}`;
+    cell.title = id;
+    grid.appendChild(cell);
+  }
+}
+
+function updateTaskCell(task_id, status) {
+  const cell = document.getElementById(`tcell-${task_id}`);
+  if (cell) {
+    cell.className = `task-cell ${status}`;
+  }
+}
+
+function refreshProgress() {
+  const total   = state.taskCount;
+  const done    = state.completedCount;
+  const errors  = state.errorCount;
+  const pct     = total > 0 ? Math.round((done + errors) / total * 100) : 0;
+
+  document.getElementById('jp-count').textContent = `${done + errors} / ${total}`;
+  const fill = document.getElementById('jp-fill');
+  fill.style.width = `${pct}%`;
+  if (errors > 0 && done === 0) fill.classList.add('error');
+}
+
+// ── Log stream ────────────────────────────────────────────────────────────
+function appendLog(timestamp, comp_id, level, message) {
+  const container = document.getElementById('log-entries');
+
+  // Remove empty-state placeholder
+  const empty = container.querySelector('.log-empty');
+  if (empty) empty.remove();
+
+  // Trim to maxLogs
+  while (container.children.length >= state.maxLogs) {
+    container.removeChild(container.lastChild);
+  }
+
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = `
+    <span class="log-ts">${fmtTime(timestamp)}</span>
+    <span class="log-comp">${escHtml(shortId(comp_id))}</span>
+    <span class="log-level ${level}">${level}</span>
+    <span class="log-msg">${escHtml(message)}</span>
+  `;
+  container.insertBefore(entry, container.firstChild);
+  state.logCount++;
+}
+
+// ── Job submission ────────────────────────────────────────────────────────
+async function submitJob() {
+  const btn      = document.getElementById('launch-btn');
+  const banner   = document.getElementById('response-banner');
+  const jobId    = document.getElementById('job-id').value.trim();
+  const name     = document.getElementById('pipeline-name').value.trim() || 'pipeline';
+  const desc     = document.getElementById('pipeline-desc').value.trim();
+  const nTasks   = parseInt(document.getElementById('task-count').value) || 10;
+
+  if (!jobId) { alert('Job ID is empty'); return; }
+
+  const now = new Date().toISOString();
+  const inputs = Array.from({ length: nTasks }, (_, i) => ({
+    task_id: `task-${String(i).padStart(3, '0')}`,
+    data:    { index: i, scale: 0.5 },
+  }));
+
+  const body = {
+    job_id:       jobId,
+    submitted_at: now,
+    pipeline:     { name, description: desc },
+    inputs,
+  };
+
+  // Reset UI
+  banner.className = 'response-banner';
+  document.getElementById('complete-banner').className = 'complete-banner';
+  state.currentJobId    = jobId;
+  state.taskCount       = nTasks;
+  state.completedCount  = 0;
+  state.errorCount      = 0;
+  state.tasks           = {};
+
+  // Show progress section, build task grid
+  document.getElementById('job-progress').classList.add('visible');
+  buildTaskGrid(nTasks);
+  refreshProgress();
+
+  // Disable button while dispatching
+  btn.disabled = true;
+  btn.classList.add('loading');
+  btn.textContent = '▸  DISPATCHING…';
+
+  try {
+    const res = await fetch('/jobs', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+    const data = await res.json();
+
+    if (res.status === 202) {
+      banner.className = 'response-banner ok';
+      banner.innerHTML = `✓ ${data.status.toUpperCase()}<br><span style="font-size:9px;opacity:0.7">${jobId}</span>`;
+      // Pre-seed new job ID for next submission
+      setTimeout(refreshJobId, 300);
+    } else {
+      const reason = data?.detail?.reason || data?.detail || res.statusText;
+      banner.className = 'response-banner err';
+      banner.innerHTML = `✗ REJECTED<br><span style="font-size:9px">${escHtml(reason)}</span>`;
+    }
+  } catch (err) {
+    banner.className = 'response-banner err';
+    banner.innerHTML = `✗ NETWORK ERROR<br><span style="font-size:9px">${escHtml(String(err))}</span>`;
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('loading');
+    btn.textContent = '▶  LAUNCH JOB';
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function fmtTime(ts) {
+  if (!ts) return '—';
+  try {
+    const d = new Date(ts);
+    return d.toTimeString().slice(0, 8);
+  } catch { return ts.slice(11, 19) || '—'; }
+}
+
+function shortId(id) {
+  // "worker-hostname-12345" → truncate to 10 chars
+  return id.length > 14 ? id.slice(0, 14) : id;
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// Allow pressing Enter in form fields to submit
+['pipeline-name', 'pipeline-desc', 'task-count'].forEach(id => {
+  document.getElementById(id)?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') submitJob();
+  });
+});
+</script>
+</body>
+</html>
