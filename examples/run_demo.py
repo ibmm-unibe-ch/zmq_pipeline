@@ -114,7 +114,7 @@ def main() -> None:
         #    component PUB socket connects (ZMQ "slow joiner" problem).
         procs.append(_launch("controller", (
             "import sys; sys.path.insert(0, '.');"
-            "from controller.controller import main;"
+            "from zmq_pipeline.controller.controller import main;"
             "main()"
         ), env))
 
@@ -131,14 +131,14 @@ def main() -> None:
         # 2. Ventilator  — binds REP + PUSH, PUB connects to Controller SUB
         procs.append(_launch("ventilator", (
             "import sys; sys.path.insert(0, '.');"
-            "from ventilator.ventilator import run;"
+            "from zmq_pipeline.ventilator.ventilator import run;"
             f"run(num_workers={n_workers})"
         ), env))
 
         # 3. Sink  — binds PULL, PUB connects to Controller SUB
         procs.append(_launch("sink", (
             "import sys; sys.path.insert(0, '.');"
-            "from sink.sink import run;"
+            "from zmq_pipeline.sink.sink import run;"
             "run(idle_timeout=600)"      # 10 min — won't timeout during demo
         ), env))
 
@@ -151,7 +151,7 @@ def main() -> None:
             worker_env["WORKER_ID"] = f"worker-{i}"
             procs.append(_launch(f"worker-{i}", (
                 "import sys; sys.path.insert(0, '.');"
-                "from worker.worker import run;"
+                "from zmq_pipeline.worker.worker import run;"
                 "run(idle_timeout=600)"  # 10 min
             ), worker_env))
 
