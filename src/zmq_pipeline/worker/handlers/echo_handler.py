@@ -11,6 +11,9 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+import random
+import time
+
 import numpy as np
 
 from .base_handler import BaseHandler
@@ -33,6 +36,8 @@ class EchoHandler(BaseHandler):
 
         # output_index: int32 array filled with the raw index value
         output_index = np.full(self.ARRAY_SHAPE, index, dtype=np.int32)
+
+        time.sleep(random.random()*2)
 
         return {
             "output_data": output_data,
