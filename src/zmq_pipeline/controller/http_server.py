@@ -45,15 +45,15 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 
-from shared.config import cfg
-from shared.protocol import (
+from ..shared.config import cfg
+from ..shared.protocol import (
     JobAcceptedResponse,
     JobRejectedResponse,
     JobSubmission,
 )
-from controller.zmq_client import VentilatorClient
-from controller.job_registry import JobRegistry
-from controller.ws_server import ws_manager
+from .zmq_client import VentilatorClient
+from .job_registry import JobRegistry
+from .ws_server import ws_manager
 
 _FRONTEND_PATH = Path(__file__).resolve().parents[1] / "frontend" / "templates" / "index.html"
 

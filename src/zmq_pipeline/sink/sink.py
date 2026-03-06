@@ -24,10 +24,10 @@ import zmq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from shared.config import cfg
-from shared.protocol import ResultMeta
-from shared.serialization import unpack_result
-from shared.telemetry_pub import TelemetryPublisher
+from ..shared.config import cfg
+from ..shared.protocol import ResultMeta
+from ..shared.serialization import unpack_result
+from ..shared.telemetry_pub import TelemetryPublisher
 
 _COMPONENT = "sink"
 _COMPONENT_ID = "sink-0"

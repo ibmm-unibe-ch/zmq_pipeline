@@ -34,11 +34,11 @@ import uvicorn
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from shared.config import cfg
-from shared.protocol import StatusEvent
-from controller.http_server import app, registry
-from controller.ws_server import ws_manager
-from controller.telemetry import run as run_telemetry
+from ..shared.config import cfg
+from ..shared.protocol import StatusEvent
+from .http_server import app, registry
+from .ws_server import ws_manager
+from .telemetry import run as run_telemetry
 
 
 def _on_event(event: object) -> None:
@@ -49,7 +49,7 @@ def _on_event(event: object) -> None:
 
     # 2. Forward the raw event to WS clients FIRST so sink/done arrives
     #    before the synthetic job_complete that follows.
-    ws_manager.broadcast_from_thread(event)
+    ws_manager.broadcast_from_thread(event) # pyright: ignore[reportArgumentType]
 
     # 3. Emit synthetic job_complete AFTER the triggering status_update
     if isinstance(event, StatusEvent):

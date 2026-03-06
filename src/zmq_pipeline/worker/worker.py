@@ -30,12 +30,12 @@ import zmq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from shared.config import cfg
-from shared.protocol import TaskEnvelope, STOP_SENTINEL
-from shared.serialization import pack_result, pack_error_result
-from shared.telemetry_pub import TelemetryPublisher
-from worker.handlers.base_handler import BaseHandler
-from worker.handlers.echo_handler import EchoHandler
+from ..shared.config import cfg
+from ..shared.protocol import TaskEnvelope, STOP_SENTINEL
+from ..shared.serialization import pack_result, pack_error_result
+from ..shared.telemetry_pub import TelemetryPublisher
+from ..worker.handlers.base_handler import BaseHandler
+from ..worker.handlers.echo_handler import EchoHandler
 
 
 def _make_worker_id() -> str:

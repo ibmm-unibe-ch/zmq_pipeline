@@ -28,9 +28,9 @@ import zmq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from shared.config import cfg
-from shared.protocol import JobDispatch, TaskEnvelope, VentilatorReply, STOP_SENTINEL
-from shared.telemetry_pub import TelemetryPublisher
+from ..shared.config import cfg
+from ..shared.protocol import JobDispatch, TaskEnvelope, VentilatorReply, STOP_SENTINEL
+from ..shared.telemetry_pub import TelemetryPublisher
 
 _COMPONENT = "ventilator"
 _COMPONENT_ID = "ventilator-0"

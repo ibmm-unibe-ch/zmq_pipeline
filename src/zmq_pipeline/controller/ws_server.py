@@ -36,7 +36,7 @@ from starlette.websockets import WebSocketDisconnect
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from shared.protocol import LogEvent, StatusEvent
+from ..shared.protocol import LogEvent, StatusEvent
 
 
 class WebSocketManager:

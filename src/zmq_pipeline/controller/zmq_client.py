@@ -27,8 +27,8 @@ import zmq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from shared.config import cfg
-from shared.protocol import JobDispatch, VentilatorReply
+from ..shared.config import cfg
+from ..shared.protocol import JobDispatch, VentilatorReply
 
 
 class VentilatorClient:

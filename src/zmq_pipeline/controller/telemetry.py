@@ -33,8 +33,8 @@ import zmq
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from shared.config import cfg
-from shared.protocol import LogEvent, StatusEvent
+from ..shared.config import cfg
+from ..shared.protocol import LogEvent, StatusEvent
 
 # ANSI colour codes for readable live output
 _RESET  = "\033[0m"

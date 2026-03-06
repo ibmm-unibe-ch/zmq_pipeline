@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from shared.protocol import StatusEvent
+from ..shared.protocol import StatusEvent
 
 
 def _utcnow() -> str:
