@@ -23,13 +23,14 @@ This framework is **not** the right choice when:
 ### Installation
 ```bash
 git clone https://github.com/ibmm-unibe-ch/zmq_pipeline.git
+cd zmq_pipeline
 pip install -e .
 ```
 
 ### Example
 You can run the demo example with:
 ```
-python run_demo.py
+python examples/run_demo.py
 ```
 
 
